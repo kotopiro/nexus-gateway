@@ -3,7 +3,7 @@
 NEXUS リアルタイム WebSocket ゲートウェイ。
 NWP v1 プロトコル / Elixir + Phoenix 実装。
 
-[![CI]([https://github.com/OWNER/nexus-gateway/actions/workflows/ci.yml/](https://github.com/kotopiro/nexus-gateway/blob/master/.github/workflows/ci.yml)badge.svg)]([https://github.com/OWNER/nexus-gateway/actions/workflows/ci.yml](https://github.com/kotopiro/nexus-gateway/blob/master/.github/workflows/ci.yml))
+[![CI](https://github.com/kotopiro/nexus-gateway/actions/workflows/ci.yml/badge.svg)](https://github.com/kotopiro/nexus-gateway/actions/workflows/ci.yml)
 
 ## 必要環境
 
