@@ -1,0 +1,25 @@
+# Elixir build artifacts
+/_build/
+/cover/
+/deps/
+/doc/
+/.fetch
+erl_crash.dump
+*.ez
+*.beam
+
+# Mix
+/.elixir_ls/
+/.lexical/
+
+# Secrets
+.env
+.env.*
+*.pem
+!test/fixtures/*.pem
+
+# OS
+.DS_Store
+Thumbs.db
+
+/tmp/
