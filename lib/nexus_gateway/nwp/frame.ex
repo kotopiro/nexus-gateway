@@ -13,13 +13,14 @@ defmodule NexusGateway.NWP.Frame do
   """
 
   @type t :: %{
-    op: non_neg_integer(),
-    d:  term(),
-    s:  non_neg_integer() | nil,
-    t:  String.t() | nil,
-  }
+          op: non_neg_integer(),
+          d: term(),
+          s: non_neg_integer() | nil,
+          t: String.t() | nil
+        }
 
-  @max_size 4 * 1024 * 1024  # 4 MB
+  # 4 MB
+  @max_size 4 * 1024 * 1024
 
   # ─── Decode ─────────────────────────────────────────────────────────
 
@@ -32,12 +33,13 @@ defmodule NexusGateway.NWP.Frame do
   def decode(binary) when is_binary(binary) do
     case Msgpax.unpack(binary) do
       {:ok, %{"op" => op} = raw} when is_integer(op) ->
-        {:ok, %{
-          op: op,
-          d:  Map.get(raw, "d"),
-          s:  Map.get(raw, "s"),
-          t:  Map.get(raw, "t"),
-        }}
+        {:ok,
+         %{
+           op: op,
+           d: Map.get(raw, "d"),
+           s: Map.get(raw, "s"),
+           t: Map.get(raw, "t")
+         }}
 
       {:ok, _} ->
         {:error, :missing_op}
@@ -56,9 +58,9 @@ defmodule NexusGateway.NWP.Frame do
   def encode(frame) do
     %{
       "op" => frame[:op] || frame["op"],
-      "d"  => frame[:d]  || frame["d"],
-      "s"  => frame[:s]  || frame["s"],
-      "t"  => frame[:t]  || frame["t"],
+      "d" => frame[:d] || frame["d"],
+      "s" => frame[:s] || frame["s"],
+      "t" => frame[:t] || frame["t"]
     }
     |> Msgpax.pack!(iodata: false)
   end

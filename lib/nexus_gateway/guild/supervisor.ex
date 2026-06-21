@@ -23,9 +23,9 @@ defmodule NexusGateway.Guild.Supervisor do
     spec = {NexusGateway.Guild.Process, guild_id}
 
     case DynamicSupervisor.start_child(__MODULE__, spec) do
-      {:ok, _pid}                        -> :ok
+      {:ok, _pid} -> :ok
       {:error, {:already_started, _pid}} -> :ok
-      {:error, reason}                   -> {:error, reason}
+      {:error, reason} -> {:error, reason}
     end
   end
 

@@ -95,6 +95,36 @@ defmodule NexusGateway.DataSource.Postgres do
     )
   end
 
+  @impl true
+  def fetch_guild_members(guild_id) do
+    # 公開メタデータのみ取得する (E2EE 原則: 公開鍵 Blob 等は含めない)。
+    query = """
+    SELECT gm.user_id, u.username
+    FROM guild_members gm
+    LEFT JOIN users u ON u.id = gm.user_id
+    WHERE gm.guild_id = $1
+    """
+
+    with_connection(
+      fn conn ->
+        case Postgrex.query(conn, query, [guild_id]) do
+          {:ok, %Postgrex.Result{rows: rows}} ->
+            members =
+              Enum.map(rows, fn [user_id, username] ->
+                %{"user_id" => user_id, "username" => username}
+              end)
+
+            {:ok, members}
+
+          {:error, reason} ->
+            Logger.error("[DataSource.Postgres] fetch_guild_members failed: #{inspect(reason)}")
+            {:error, reason}
+        end
+      end,
+      fn -> NexusGateway.DataSource.Stub.fetch_guild_members(guild_id) end
+    )
+  end
+
   # ─── Private ────────────────────────────────────────────────────────
 
   # 接続プールが起動していない場合 (DB未設定の dev 環境) は Stub にフォールバックする。

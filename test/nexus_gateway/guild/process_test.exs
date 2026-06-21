@@ -2,7 +2,6 @@ defmodule NexusGateway.Guild.ProcessTest do
   use ExUnit.Case, async: true
 
   alias NexusGateway.Guild.{Process, Supervisor}
-  alias NexusGateway.NWP.Frame
 
   # テストごとに一意な guild_id を使う
   setup do
@@ -17,23 +16,25 @@ defmodule NexusGateway.Guild.ProcessTest do
     assert_receive {:dispatch, event_map}, 500
     assert event_map.t == "PRESENCE_UPDATE"
     assert event_map.d["user_id"] == "user_a"
-    assert event_map.d["status"]  == "online"
+    assert event_map.d["status"] == "online"
   end
 
   test "broadcast が全メンバーに届く", %{guild_id: gid} do
     Process.join(gid, "user_b", self())
-    assert_receive {:dispatch, _}, 500  # PRESENCE_UPDATE を読み捨て
+    # PRESENCE_UPDATE を読み捨て
+    assert_receive {:dispatch, _}, 500
 
     Process.broadcast(gid, "CUSTOM_EVENT", %{"value" => 42})
 
     assert_receive {:dispatch, event_map}, 500
-    assert event_map.t          == "CUSTOM_EVENT"
+    assert event_map.t == "CUSTOM_EVENT"
     assert event_map.d["value"] == 42
   end
 
   test "leave するとオフライン PRESENCE_UPDATE が届く", %{guild_id: gid} do
     Process.join(gid, "user_c", self())
-    assert_receive {:dispatch, _}, 500  # online
+    # online
+    assert_receive {:dispatch, _}, 500
 
     Process.leave(gid, "user_c", self())
     assert_receive {:dispatch, event_map}, 500
@@ -49,11 +50,12 @@ defmodule NexusGateway.Guild.ProcessTest do
 
   test "presence_update が全メンバーに届く", %{guild_id: gid} do
     Process.join(gid, "user_d", self())
-    assert_receive {:dispatch, _}, 500  # online
+    # online
+    assert_receive {:dispatch, _}, 500
 
     Process.update_presence(gid, "user_d", %{"status" => "dnd"})
     assert_receive {:dispatch, event_map}, 500
-    assert event_map.t          == "PRESENCE_UPDATE"
+    assert event_map.t == "PRESENCE_UPDATE"
     assert event_map.d["status"] == "dnd"
   end
 
@@ -62,9 +64,16 @@ defmodule NexusGateway.Guild.ProcessTest do
     assert_receive {:dispatch, _}, 500
 
     # 別ユーザーも参加させて typing を受け取る側にする
-    other_pid = spawn(fn -> receive do _ -> :ok end end)
+    other_pid =
+      spawn(fn ->
+        receive do
+          _ -> :ok
+        end
+      end)
+
     Process.join(gid, "user_f", other_pid)
-    assert_receive {:dispatch, _}, 500  # user_f online
+    # user_f online
+    assert_receive {:dispatch, _}, 500
 
     # user_e が typing_start
     Process.typing_start(gid, "ch_typing", "user_e")

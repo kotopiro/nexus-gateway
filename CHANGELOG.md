@@ -1,5 +1,94 @@
 # NEXUS Gateway — バグ修正ログ
 
+## v0.1.3 (2026-06-20) — CIグリーン化 + REQUEST_MEMBERS実装完了
+
+開発の流れ: Claude (設計・v0.1.1/v0.1.2) → **Genspark** (実hex.pm環境でCI修正、
+REQUEST_MEMBERS着手、クレジット切れで中断) → **Claude** (引き継ぎ完成)
+
+### Genspark が発見・修正した実バグ (v0.1.2 では検出不能だった)
+
+v0.1.2 の「検証」は Code.string_to_quoted による構文チェックと、
+Postgrex/Gnat の実ソースとの API 照合のみで、**実際のコンパイル・実行は
+していなかった**。Genspark は hex.pm に到達できる環境で実際に
+`mix compile` / `mix test` / 実 WebSocket 接続を行い、以下の本物のバグを発見した:
+
+1. **`Opcodes.identify()` をガード節で呼び出していた**
+   Elixir はガード節内でリモート関数呼び出しを許可しない (コンパイルエラー)。
+   `route/2` の `when` ガードを `cond do` ブロックに変更して修正。
+
+2. **Phoenix 1.8 で `:transport_module` オプションが廃止されていた**
+   `endpoint.ex` の `socket/3` 呼び出し方法が古い Phoenix API のままだった。
+   Raw Transport モジュールを第2引数に直接渡す方式に変更し、
+   不要になった `UserSocket` ラッパーを削除。
+   さらに `websocket: [path: "/"]` が無いと実際のマウント先が
+   `/gateway/v1/websocket` になってしまう問題も発見・修正。
+
+3. **`RateLimiter` が `:bag` を使っていたため機能していなかった**
+   `:bag` は完全に同一のタプルを重複排除する。`{key, timestamp_ms}` は
+   同一ミリ秒内の複数リクエストで同じタプルになり、1件に潰れてしまう。
+   `:duplicate_bag` に変更して修正 (これは静かに失敗するタイプの重大バグだった)。
+
+4. **`Guild.Process` の join/leave で fanout に古い state を使っていた**
+   `join` 時は新しい接続を含まない旧 state で fanout していたため、
+   参加した本人が自分のオンライン通知を受け取れなかった。
+   `leave` も同様に新 state を使っていたため、退出者が自分のオフライン
+   通知を受け取れなかった。State の使い分けを修正。
+
+5. **`HealthController` に `formats: [:json]` が必要 (Phoenix 1.8)**
+
+6. **`child_spec/1` に `@impl true` が必要 (warnings-as-errors で検出)**
+
+7. **`mix format --check-formatted` が大量の差分を検出**
+   手書きコードの列揃えインデントが Elixir 標準フォーマッタと不一致。
+   `mix format` を実行して解消。
+
+8. **version 不整合**: `mix.exs` が `0.1.1`、CHANGELOG は `0.1.2` と表記。
+   `Application.spec(:nexus_gateway, :vsn)` を使い、`mix.exs` の値を
+   単一の真実源にするよう修正。
+
+### REQUEST_MEMBERS (op:11) + GUILD_MEMBERS_CHUNK 実装完了
+
+Genspark がクレジット切れで中断した箇所 (`filter_members/2`,
+`maybe_limit/2`, `annotate_presence/2`, `send_member_chunks/3` が
+呼び出されているが未定義) を引き継いで実装。
+
+- `DataSource` behavior に `fetch_guild_members/1` を追加
+  (Postgres実装 + Stub実装の両方)
+- `Guild.Process.request_members/3` — 要求元にのみ
+  `GUILD_MEMBERS_CHUNK` を返す (guild 全体への broadcast はしない)
+- query (前方一致フィルタ) / limit に対応
+- 1000件ごとのチャンク分割 (Discord 互換)
+- 0件マッチでも終端チャンクを1件返し、クライアントを待たせない設計
+- `transport.ex` の `on_request_members/2` を実装に接続
+  (guild メンバーシップの検証付き)
+
+### 検証方法 (このセッションで実施)
+
+開発環境がさらに hex.pm に到達できない制約があったため:
+
+1. Erlang 25 環境向けに **Elixir 1.16.3 をソースから git clone + `make` でビルド**
+   (GitHub release バイナリは非対応ドメインへリダイレクトされるため不可)
+2. `jose` ライブラリの `dynamic()` 型注釈 (OTP27限定) を `term()` に
+   パッチ (型注釈のみで実行時動作に影響なし)
+3. `rebar3` を apt から取得し、Mix が期待する `~/.mix/elixir/X-Y/rebar3`
+   パスに配置
+4. **`mix test --exclude integration`: 56 tests, 0 failures**
+5. **`mix compile --warnings-as-errors`: 警告0件**
+6. **`mix format --check-formatted`: 整形済み**
+7. **実サーバー起動 + 実 WebSocket クライアント (Python) による E2E 検証**:
+   HELLO → IDENTIFY → READY → REQUEST_MEMBERS → GUILD_MEMBERS_CHUNK
+   (query フィルタ込み) → HEARTBEAT/ACK の全フローを実際に確認
+
+### 教訓
+
+v0.1.2 時点の「構文チェック + API照合による検証」は、実際にコードを
+実行しなければ発見できない種類のバグ (ガード節の制約、ETSセマンティクス、
+state の参照順序、フレームワークAPIの変更) を全く検出できなかった。
+**実行を伴わない検証には限界がある。** 今回 Genspark が実環境で
+mix compile/test を回したことで、上記8件の本物のバグが初めて発見された。
+
+---
+
 ## v0.1.2 (2026-06-20) — 5つの優先TODO実装
 
 antigravity の作業引き継ぎが途中で中断したため、残りを引き継いで実装。

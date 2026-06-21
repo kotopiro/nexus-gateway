@@ -13,16 +13,16 @@ defmodule NexusGateway.RateLimiter do
 
   use GenServer
 
-  @table      :nexus_rate_limits
+  @table :nexus_rate_limits
   @cleanup_ms 30 * 1_000
 
-  @global_limit       120
-  @global_window_ms   60_000
+  @global_limit 120
+  @global_window_ms 60_000
 
-  @typing_limit       1
-  @typing_window_ms   3_000
+  @typing_limit 1
+  @typing_window_ms 3_000
 
-  @e2ee_burst_limit   20
+  @e2ee_burst_limit 20
   @e2ee_burst_window_ms 1_000
   @e2ee_sustained_limit 5
   @e2ee_sustained_window_ms 1_000
@@ -62,11 +62,19 @@ defmodule NexusGateway.RateLimiter do
 
   @impl true
   def init(_) do
+    # :duplicate_bag を使う点が重要。
+    # :bag は「同一の完全なタプル」を重複排除するため、{key, ts} で ts (ミリ秒) が
+    # 同じ値だと複数回の挿入が 1 件に潰れてしまい、レート制限が正しく機能しない
+    # (同一ミリ秒内の連続リクエストがカウントされない)。
+    # :duplicate_bag なら同一タプルでも全て保持されるため、正確にカウントできる。
     :ets.new(@table, [
-      :bag, :public, :named_table,
-      read_concurrency:  true,
-      write_concurrency: true,
+      :duplicate_bag,
+      :public,
+      :named_table,
+      read_concurrency: true,
+      write_concurrency: true
     ])
+
     schedule_cleanup()
     {:ok, %{}}
   end
@@ -74,6 +82,7 @@ defmodule NexusGateway.RateLimiter do
   @impl true
   def handle_info(:cleanup, state) do
     now = monotonic_ms()
+
     # 全エントリを走査して古いタイムスタンプを削除 (bag なので個別削除が必要)
     :ets.tab2list(@table)
     |> Enum.each(fn {key, ts} = entry ->
@@ -105,11 +114,11 @@ defmodule NexusGateway.RateLimiter do
   end
 
   # cleanup 時にキーごとのウィンドウ幅を判定する (key は {scope, id} 形式)
-  defp window_for({:global, _}),        do: @global_window_ms
-  defp window_for({:typing, _}),        do: @typing_window_ms
-  defp window_for({:e2ee_burst, _}),    do: @e2ee_burst_window_ms
+  defp window_for({:global, _}), do: @global_window_ms
+  defp window_for({:typing, _}), do: @typing_window_ms
+  defp window_for({:e2ee_burst, _}), do: @e2ee_burst_window_ms
   defp window_for({:e2ee_sustained, _}), do: @e2ee_sustained_window_ms
-  defp window_for(_),                   do: @global_window_ms
+  defp window_for(_), do: @global_window_ms
 
   defp monotonic_ms, do: System.monotonic_time(:millisecond)
 

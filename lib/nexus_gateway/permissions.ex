@@ -13,31 +13,31 @@ defmodule NexusGateway.Permissions do
 
   import Bitwise
 
-  @view_channel       1 <<< 0
-  @send_messages      1 <<< 1
-  @send_typing        1 <<< 2
-  @add_reactions      1 <<< 3
-  @attach_files        1 <<< 4
-  @manage_messages    1 <<< 5
-  @manage_channel     1 <<< 6
-  @connect_voice      1 <<< 7
-  @speak_voice        1 <<< 8
-  @mention_everyone   1 <<< 9
-  @manage_roles       1 <<< 10
-  @administrator      1 <<< 11
+  @view_channel 1 <<< 0
+  @send_messages 1 <<< 1
+  @send_typing 1 <<< 2
+  @add_reactions 1 <<< 3
+  @attach_files 1 <<< 4
+  @manage_messages 1 <<< 5
+  @manage_channel 1 <<< 6
+  @connect_voice 1 <<< 7
+  @speak_voice 1 <<< 8
+  @mention_everyone 1 <<< 9
+  @manage_roles 1 <<< 10
+  @administrator 1 <<< 11
 
-  def view_channel,     do: @view_channel
-  def send_messages,    do: @send_messages
-  def send_typing,      do: @send_typing
-  def add_reactions,    do: @add_reactions
-  def attach_files,     do: @attach_files
-  def manage_messages,  do: @manage_messages
-  def manage_channel,   do: @manage_channel
-  def connect_voice,    do: @connect_voice
-  def speak_voice,      do: @speak_voice
+  def view_channel, do: @view_channel
+  def send_messages, do: @send_messages
+  def send_typing, do: @send_typing
+  def add_reactions, do: @add_reactions
+  def attach_files, do: @attach_files
+  def manage_messages, do: @manage_messages
+  def manage_channel, do: @manage_channel
+  def connect_voice, do: @connect_voice
+  def speak_voice, do: @speak_voice
   def mention_everyone, do: @mention_everyone
-  def manage_roles,     do: @manage_roles
-  def administrator,    do: @administrator
+  def manage_roles, do: @manage_roles
+  def administrator, do: @administrator
 
   @doc "全権限を持つビットセットを返す (administrator含む)"
   @spec all() :: permission_set()
@@ -79,8 +79,8 @@ defmodule NexusGateway.Permissions do
 
   defp check(user_id, channel_id, flag) do
     case NexusGateway.DataSource.fetch_channel_permissions(user_id, channel_id) do
-      {:ok, set}      -> has?(set, flag)
-      {:error, _}     -> false
+      {:ok, set} -> has?(set, flag)
+      {:error, _} -> false
     end
   end
 end

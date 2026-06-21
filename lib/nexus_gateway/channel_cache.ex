@@ -10,8 +10,8 @@ defmodule NexusGateway.ChannelCache do
 
   use GenServer
 
-  @table      :nexus_channel_cache
-  @ttl_ms     5 * 60 * 1_000
+  @table :nexus_channel_cache
+  @ttl_ms 5 * 60 * 1_000
   @cleanup_ms 60 * 1_000
 
   # ─── Public API ─────────────────────────────────────────────────────
@@ -76,10 +76,13 @@ defmodule NexusGateway.ChannelCache do
   @impl true
   def init(_) do
     :ets.new(@table, [
-      :set, :public, :named_table,
-      read_concurrency:  true,
-      write_concurrency: true,
+      :set,
+      :public,
+      :named_table,
+      read_concurrency: true,
+      write_concurrency: true
     ])
+
     schedule_cleanup()
     {:ok, %{}}
   end

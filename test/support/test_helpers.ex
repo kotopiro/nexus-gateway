@@ -20,9 +20,9 @@ defmodule NexusGateway.TestHelpers do
   def identify_frame(token, intents \\ 0) do
     Frame.encode(%{
       op: 3,
-      d:  %{"token" => token, "intents" => intents},
-      s:  nil,
-      t:  nil,
+      d: %{"token" => token, "intents" => intents},
+      s: nil,
+      t: nil
     })
   end
 

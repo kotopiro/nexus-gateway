@@ -35,4 +35,18 @@ defmodule NexusGateway.DataSource.Stub do
   def fetch_channel_permissions(_user_id, _channel_id) do
     {:ok, Permissions.all()}
   end
+
+  @impl true
+  def fetch_guild_members(guild_id) when is_binary(guild_id) do
+    # プロトタイプ用の決定論的なダミーメンバー (テスト容易性優先)。
+    # 本番では DataSource.Postgres が guild_members テーブルから取得する。
+    members =
+      for n <- 1..3 do
+        %{"user_id" => "#{guild_id}_member_#{n}", "username" => "stub_user_#{n}"}
+      end
+
+    {:ok, members}
+  end
+
+  def fetch_guild_members(_), do: {:error, :invalid_guild_id}
 end

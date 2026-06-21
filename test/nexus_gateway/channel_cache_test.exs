@@ -12,7 +12,7 @@ defmodule NexusGateway.ChannelCacheTest do
 
     test "put したキーは get できる" do
       channel_id = unique_id()
-      guild_id   = "guild_xxx"
+      guild_id = "guild_xxx"
 
       ChannelCache.put(channel_id, guild_id)
       assert {:ok, ^guild_id} = ChannelCache.get(channel_id)

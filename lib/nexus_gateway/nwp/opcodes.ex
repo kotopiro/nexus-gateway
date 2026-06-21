@@ -20,26 +20,27 @@ defmodule NexusGateway.NWP.Opcodes do
   15 MLS_WELCOME        S→C  MLS Welcome (新規参加者)
   """
 
-  def dispatch,            do: 0
-  def heartbeat,           do: 1
-  def heartbeat_ack,       do: 2
-  def identify,            do: 3
-  def ready,               do: 4
-  def resume,              do: 5
-  def resumed,             do: 6
-  def reconnect,           do: 7
-  def invalid_session,     do: 8
-  def presence_update,     do: 9
-  def voice_state_update,  do: 10
-  def request_members,     do: 11
-  def typing_start,        do: 12
-  def e2ee_envelope,       do: 13
-  def mls_commit,          do: 14
-  def mls_welcome,         do: 15
+  def dispatch, do: 0
+  def heartbeat, do: 1
+  def heartbeat_ack, do: 2
+  def identify, do: 3
+  def ready, do: 4
+  def resume, do: 5
+  def resumed, do: 6
+  def reconnect, do: 7
+  def invalid_session, do: 8
+  def presence_update, do: 9
+  def voice_state_update, do: 10
+  def request_members, do: 11
+  def typing_start, do: 12
+  def e2ee_envelope, do: 13
+  def mls_commit, do: 14
+  def mls_welcome, do: 15
 
-  def hello,               do: 16
+  def hello, do: 16
 
-  @unauthenticated_allowed [3, 5]  # IDENTIFY, RESUME
+  # IDENTIFY, RESUME
+  @unauthenticated_allowed [3, 5]
 
   def requires_auth?(op), do: op not in @unauthenticated_allowed
 end

@@ -1,11 +1,11 @@
 defmodule NexusGateway.HealthController do
-  use Phoenix.Controller
+  use Phoenix.Controller, formats: [:json]
 
   def index(conn, _params) do
     json(conn, %{
-      status:  "ok",
+      status: "ok",
       service: "nexus-gateway",
-      version: "0.1.0",
+      version: Application.spec(:nexus_gateway, :vsn) |> to_string()
     })
   end
 end

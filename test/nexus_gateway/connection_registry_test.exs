@@ -19,7 +19,7 @@ defmodule NexusGateway.ConnectionRegistryTest do
 
     test "同一ユーザーが複数プロセスから登録できる (複数デバイス)" do
       user_id = unique_user()
-      parent  = self()
+      parent = self()
 
       ConnectionRegistry.register(user_id)
 

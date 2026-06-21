@@ -12,10 +12,13 @@ defmodule NexusGateway.Session.Store do
 
   use GenServer
 
-  @table         :nexus_sessions
-  @max_events    5_000            # RESUME バッファ上限
-  @ttl_ms        5 * 60 * 1_000  # 5分 (切断後 RESUME 可能期間)
-  @cleanup_ms    60 * 1_000       # 1分ごとにクリーンアップ
+  @table :nexus_sessions
+  # RESUME バッファ上限
+  @max_events 5_000
+  # 5分 (切断後 RESUME 可能期間)
+  @ttl_ms 5 * 60 * 1_000
+  # 1分ごとにクリーンアップ
+  @cleanup_ms 60 * 1_000
 
   # ─── Public API ─────────────────────────────────────────────────────
 
@@ -27,12 +30,14 @@ defmodule NexusGateway.Session.Store do
   @spec create(String.t(), pid()) :: String.t()
   def create(user_id, conn_pid) do
     session_id = generate_id()
+
     session = %{
-      user_id:    user_id,
-      conn_pid:   conn_pid,
+      user_id: user_id,
+      conn_pid: conn_pid,
       created_at: monotonic_ms(),
-      events:     [],
+      events: []
     }
+
     :ets.insert(@table, {session_id, session})
     session_id
   end
@@ -42,13 +47,14 @@ defmodule NexusGateway.Session.Store do
   def get(session_id) do
     case :ets.lookup(@table, session_id) do
       [{^session_id, session}] -> {:ok, session}
-      []                       -> {:error, :not_found}
+      [] -> {:error, :not_found}
     end
   end
 
   @doc "セッションを削除"
   @spec delete(String.t() | nil) :: :ok
   def delete(nil), do: :ok
+
   def delete(session_id) do
     :ets.delete(@table, session_id)
     :ok
@@ -79,10 +85,13 @@ defmodule NexusGateway.Session.Store do
   @impl true
   def init(_) do
     :ets.new(@table, [
-      :set, :public, :named_table,
-      read_concurrency:  true,
-      write_concurrency: true,
+      :set,
+      :public,
+      :named_table,
+      read_concurrency: true,
+      write_concurrency: true
     ])
+
     schedule_cleanup()
     {:ok, %{}}
   end
@@ -94,9 +103,11 @@ defmodule NexusGateway.Session.Store do
         # 新しいイベントを先頭に積み、上限で切る
         new_events = [event | session.events] |> Enum.take(@max_events)
         :ets.insert(@table, {session_id, %{session | events: new_events}})
+
       [] ->
         :ok
     end
+
     {:noreply, state}
   end
 

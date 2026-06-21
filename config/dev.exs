@@ -27,7 +27,7 @@ if url = System.get_env("POSTGRES_URL") do
 
   config :nexus_gateway, :postgres,
     hostname: uri.host,
-    port:     uri.port || 5432,
+    port: uri.port || 5432,
     username: user,
     password: pass,
     database: String.trim_leading(uri.path || "/nexus_dev", "/"),

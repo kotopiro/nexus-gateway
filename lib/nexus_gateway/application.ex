@@ -12,7 +12,8 @@ defmodule NexusGateway.Application do
 
   @impl true
   def start(_type, _args) do
-    Logger.info("Starting NEXUS Gateway v0.1.1")
+    version = Application.spec(:nexus_gateway, :vsn) |> to_string()
+    Logger.info("Starting NEXUS Gateway v#{version}")
 
     children =
       [
@@ -29,13 +30,13 @@ defmodule NexusGateway.Application do
         # Guild プロセス動的スーパーバイザ
         NexusGateway.Guild.Supervisor,
         # Phoenix PubSub (ノード内ブロードキャスト)
-        {Phoenix.PubSub, name: NexusGateway.PubSub},
+        {Phoenix.PubSub, name: NexusGateway.PubSub}
       ]
       |> maybe_add_postgres()
       |> maybe_add_nats()
       |> Kernel.++([
         # Phoenix Endpoint (WebSocket 受付、最後に起動)
-        NexusGateway.Endpoint,
+        NexusGateway.Endpoint
       ])
 
     opts = [strategy: :one_for_one, name: NexusGateway.Supervisor]
@@ -72,7 +73,7 @@ defmodule NexusGateway.Application do
       %{url: nats_url} ->
         conn_spec = %{
           name: NexusGateway.NATS.Conn,
-          connection_settings: [parse_nats_url(nats_url)],
+          connection_settings: [parse_nats_url(nats_url)]
         }
 
         consumer_spec = %{
@@ -81,14 +82,15 @@ defmodule NexusGateway.Application do
           subscription_topics: [
             %{topic: "dispatch.guild.*"},
             %{topic: "dispatch.channel.*"},
-            %{topic: "dispatch.user.*"},
-          ],
+            %{topic: "dispatch.user.*"}
+          ]
         }
 
-        children ++ [
-          {Gnat.ConnectionSupervisor, conn_spec},
-          {Gnat.ConsumerSupervisor, consumer_spec},
-        ]
+        children ++
+          [
+            {Gnat.ConnectionSupervisor, conn_spec},
+            {Gnat.ConsumerSupervisor, consumer_spec}
+          ]
     end
   end
 

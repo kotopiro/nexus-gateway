@@ -8,33 +8,38 @@ defmodule NexusGateway.NWP.FrameTest do
       binary = Frame.encode(%{op: 1, d: nil, s: nil, t: nil})
       assert {:ok, frame} = Frame.decode(binary)
       assert frame.op == 1
-      assert frame.d  == nil
-      assert frame.s  == nil
-      assert frame.t  == nil
+      assert frame.d == nil
+      assert frame.s == nil
+      assert frame.t == nil
     end
 
     test "DISPATCH フレームをデコードする" do
-      binary = Frame.encode(%{
-        op: 0,
-        d:  %{"channel_id" => "ch_123", "content" => "hello"},
-        s:  42,
-        t:  "MESSAGE_CREATE",
-      })
+      binary =
+        Frame.encode(%{
+          op: 0,
+          d: %{"channel_id" => "ch_123", "content" => "hello"},
+          s: 42,
+          t: "MESSAGE_CREATE"
+        })
+
       assert {:ok, frame} = Frame.decode(binary)
-      assert frame.op         == 0
-      assert frame.s          == 42
-      assert frame.t          == "MESSAGE_CREATE"
+      assert frame.op == 0
+      assert frame.s == 42
+      assert frame.t == "MESSAGE_CREATE"
       assert frame.d["content"] == "hello"
     end
 
     test "E2EE payload (binary) をそのまま保持する" do
       payload = :crypto.strong_rand_bytes(64)
-      binary  = Frame.encode(%{
-        op: 13,
-        d:  %{"payload" => payload, "channel_id" => "ch_e2ee"},
-        s:  nil,
-        t:  nil,
-      })
+
+      binary =
+        Frame.encode(%{
+          op: 13,
+          d: %{"payload" => payload, "channel_id" => "ch_e2ee"},
+          s: nil,
+          t: nil
+        })
+
       assert {:ok, frame} = Frame.decode(binary)
       assert frame.d["payload"] == payload
     end
@@ -65,10 +70,10 @@ defmodule NexusGateway.NWP.FrameTest do
 
     test "エンコード→デコードのラウンドトリップ" do
       original = %{op: 9, d: %{"status" => "idle"}, s: nil, t: nil}
-      result   = original |> Frame.encode() |> Frame.decode()
+      result = original |> Frame.encode() |> Frame.decode()
       assert {:ok, decoded} = result
-      assert decoded.op              == 9
-      assert decoded.d["status"]     == "idle"
+      assert decoded.op == 9
+      assert decoded.d["status"] == "idle"
     end
   end
 
@@ -76,7 +81,7 @@ defmodule NexusGateway.NWP.FrameTest do
     test "DISPATCH フレームの map を返す" do
       evt = Frame.event("TYPING_START", %{"user_id" => "u1"})
       assert evt.op == 0
-      assert evt.t  == "TYPING_START"
+      assert evt.t == "TYPING_START"
       assert evt.d["user_id"] == "u1"
     end
   end

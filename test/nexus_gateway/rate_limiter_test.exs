@@ -32,7 +32,7 @@ defmodule NexusGateway.RateLimiterTest do
 
   describe "check_typing/2" do
     test "同一 user+channel で 1件/3秒を超えると制限される" do
-      user_id    = unique_id()
+      user_id = unique_id()
       channel_id = unique_id()
 
       assert :ok = RateLimiter.check_typing(user_id, channel_id)

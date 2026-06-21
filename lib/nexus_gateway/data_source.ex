@@ -22,6 +22,15 @@ defmodule NexusGateway.DataSource do
   @callback fetch_channel_permissions(user_id :: String.t(), channel_id :: String.t()) ::
               {:ok, NexusGateway.Permissions.permission_set()} | {:error, term()}
 
+  @doc """
+  guild に所属するメンバー一覧を返す (REQUEST_MEMBERS / GUILD_MEMBERS_CHUNK 用)。
+
+  各メンバーは最低限 "user_id" を含む map。実装によっては username 等も付与してよい。
+  E2EE 原則: メンバー情報は公開メタデータのみ (公開鍵 Blob 等は含めない)。
+  """
+  @callback fetch_guild_members(guild_id :: String.t()) ::
+              {:ok, [map()]} | {:error, term()}
+
   @doc "現在設定されている DataSource 実装モジュールを返す"
   def impl do
     Application.get_env(:nexus_gateway, :data_source, NexusGateway.DataSource.Stub)
@@ -36,4 +45,7 @@ defmodule NexusGateway.DataSource do
   @doc "チャンネル権限 (現在の実装経由)"
   def fetch_channel_permissions(user_id, channel_id),
     do: impl().fetch_channel_permissions(user_id, channel_id)
+
+  @doc "guild のメンバー一覧 (現在の実装経由)"
+  def fetch_guild_members(guild_id), do: impl().fetch_guild_members(guild_id)
 end
