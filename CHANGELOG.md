@@ -1,5 +1,94 @@
 # NEXUS Gateway — バグ修正ログ
 
+## v0.1.4 (2026-06-21) — PostgreSQLスキーマ確定 + UUID変換バグ修正
+
+CI (v0.1.3) がグリーンになったことを確認後、次の優先タスクとして
+「PostgreSQLの実スキーマを先に決める」を選択。理由: `postgres.ex` は
+既に `guild_members`/`channels`/`roles`/`member_roles`/`users` を
+参照するクエリを書いていたが、それらを作る migration が一度も
+存在せず、一度も実DBで検証されていなかった。
+
+### 実施内容
+
+1. **`migrations/` ディレクトリを新設**
+   `golang-migrate` 互換形式 (`NNNNNN_name.up.sql`/`.down.sql`) で
+   7つのテーブルを定義: `users`, `guilds`, `channels`, `roles`,
+   `guild_members`, `member_roles`, `sessions`, `prekeys`, `mls_groups`。
+   nexus-api (Go, 未実装) が将来そのまま `migrate` コマンドで使える形式。
+
+2. **設計判断の明文化**: `channels.guild_id` は Layer 1/2 (DM/暗号化グループ)
+   では実際の `guilds.id` を指さない「合成ルーティングID」であることを
+   migration 内コメントと `migrations/README.md` に明記。
+   既存のGatewayコード (`Guild.Process` が「1 guild_id = 1 GenServer」を
+   前提にルーティングする設計) を変更せずに済むよう、この層で
+   guild_id への外部キー制約を意図的に外した。
+
+3. **実 PostgreSQL 16 でマイグレーションを実際に適用し、検証**
+   ローカルに `apt-get install postgresql-16` でインスタンスを立て、
+   7マイグレーションを順に適用 → テストデータ投入 →
+   `postgres.ex` の4関数全てを実行して動作確認。
+
+### 発見した実バグ: UUID文字列の Postgrex エンコードエラー
+
+検証中に **新しい実バグ** を発見した:
+
+```
+DBConnection.EncodeError: Postgrex expected a binary of 16 bytes,
+got "11111111-1111-1111-1111-111111111111"
+```
+
+Postgrex (Ecto非使用、生クライアント) の組み込み UUID extension は
+**16バイトの生バイナリ以外を一切受け付けない**。文字列形式UUIDの
+自動変換は行われない (Ectoを使えば `Ecto.UUID` 型が自動でやってくれるが、
+nexus-gateway は意図的に Ecto を使わない設計のため、この変換を
+自前で書く必要があった)。
+
+JWT の `sub` クレームは常に文字列なので、Auth → transport.ex →
+DataSource.Postgres という経路を通る `user_id`/`channel_id`/`guild_id`
+は全て文字列形式。つまり **`postgres.ex` の4つの関数は、実際の
+PostgreSQL接続が有効になった瞬間に100%失敗する状態だった**
+(これまでテストされていなかったため検出されていなかった)。
+
+**修正**: `postgres.ex` に `uuid_to_binary/1` (文字列→16バイト) と
+`uuid_to_string/1` (16バイト→文字列) を追加し、全クエリの
+パラメータ送信前・結果取得後の境界でこの変換を一元的に行うよう変更。
+呼び出し元 (transport.ex, ChannelCache等) は影響を受けない
+(常に文字列形式のUUIDを扱う前提は変えていない)。
+
+修正後、実DB相手に8項目 (4関数 × 正常系/異常系) を再検証し、
+全て期待通りの結果を確認:
+```
+fetch_guild_ids(alice)              -> {:ok, ["33333333-...-333"]}
+fetch_guild_ids(存在しないユーザー)   -> {:ok, []}
+fetch_guild_for_channel(general)    -> {:ok, "33333333-...-333"}
+fetch_guild_for_channel(存在しないch) -> {:error, :not_found}
+fetch_channel_permissions(alice)    -> {:ok, 3}  (view+send_messages)
+fetch_channel_permissions(bob)      -> {:ok, 0}  (ロールなし)
+fetch_guild_members(guild)          -> alice, bob 両方を正しく返す
+Permissions.has?/2 の整合性          -> 全て期待通り
+```
+
+### 統合テスト追加
+
+`test/nexus_gateway/data_source/postgres_test.exs` を新設
+(`@tag :integration`、デフォルトの `mix test` では実行されない)。
+実 PostgreSQL が必要なため CI には含めず、手元で実DBを立てた際に
+`mix test --include integration` で実行する運用とした。
+
+### 教訓 (またしても)
+
+v0.1.2 → v0.1.3 で「実際に mix compile/test を回すことの重要性」を
+学んだはずだったが、今回は **「実際にDBを繋いで動かす」ことの重要性**を
+再確認した。Postgrex連携コードは構文的に正しく、コンパイルも通り、
+mix testも (Stubにフォールバックする設計のため) 通っていたが、
+実際のPostgreSQL接続が有効になった瞬間に確実に失敗する状態だった。
+**「コンパイルが通る」「テストが通る」は、そのコードパスが実際に
+実行されたことを意味しない。** DataSource.Postgresはconfig/test.exsで
+Stubに強制されているため、mix testではこのモジュールのコードは
+一度も実行されていなかった。
+
+---
+
 ## v0.1.3 (2026-06-20) — CIグリーン化 + REQUEST_MEMBERS実装完了
 
 開発の流れ: Claude (設計・v0.1.1/v0.1.2) → **Genspark** (実hex.pm環境でCI修正、
