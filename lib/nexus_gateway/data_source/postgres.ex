@@ -5,11 +5,26 @@ defmodule NexusGateway.DataSource.Postgres do
   接続プール: NexusGateway.Repo.Pool (Postgrex.start_link/1 で起動、application.ex で管理)
   接続設定がない場合は Stub にフォールバックする (起動を妨げない)。
 
-  スキーマ前提 (NEXUS_ARCHITECTURE_v0.2.md 7.3 参照):
+  スキーマ: migrations/ 配下の golang-migrate 互換マイグレーションを参照。
     guild_members(user_id, guild_id)
     channels(id, guild_id)
     member_roles(user_id, guild_id, role_id)
     roles(id, guild_id, permissions)
+    users(id, username)
+
+  ★ UUID の扱いについて (重要) ★
+    Postgrex は素の状態では UUID カラムを「文字列」として送受信できない。
+    内部の Postgrex.Extensions.UUID は厳密に「16バイトの生バイナリ」のみを
+    受け付け、`"11111111-1111-..."` のようなダッシュ付き文字列を渡すと
+    DBConnection.EncodeError で例外になる (実機検証で確認済みの実バグ)。
+
+    一方、JWT の `sub` クレームや WebSocket 経由のクライアント入力は
+    常に文字列形式の UUID として届く。そのため、このモジュールの境界で
+    必ず文字列 ⇄ バイナリの変換を行う:
+      - クエリパラメータに渡す前: uuid_to_binary/1 で文字列→16バイト
+      - クエリ結果から取り出した後: uuid_to_string/1 で16バイト→文字列
+    呼び出し元 (transport.ex, ChannelCache 等) は常に文字列形式の UUID を
+    扱う前提を変えない。バイナリ変換はこのモジュール内に閉じ込める。
   """
 
   @behaviour NexusGateway.DataSource
@@ -26,10 +41,10 @@ defmodule NexusGateway.DataSource.Postgres do
 
     with_connection(
       fn conn ->
-        case Postgrex.query(conn, query, [user_id]) do
-          {:ok, %Postgrex.Result{rows: rows}} ->
-            {:ok, Enum.map(rows, fn [guild_id] -> guild_id end)}
-
+        with {:ok, user_id_bin} <- uuid_to_binary(user_id),
+             {:ok, %Postgrex.Result{rows: rows}} <- Postgrex.query(conn, query, [user_id_bin]) do
+          {:ok, Enum.map(rows, fn [guild_id_bin] -> uuid_to_string(guild_id_bin) end)}
+        else
           {:error, reason} ->
             Logger.error("[DataSource.Postgres] fetch_guild_ids failed: #{inspect(reason)}")
             {:error, reason}
@@ -45,13 +60,13 @@ defmodule NexusGateway.DataSource.Postgres do
 
     with_connection(
       fn conn ->
-        case Postgrex.query(conn, query, [channel_id]) do
-          {:ok, %Postgrex.Result{rows: [[guild_id]]}} ->
-            {:ok, guild_id}
-
-          {:ok, %Postgrex.Result{rows: []}} ->
-            {:error, :not_found}
-
+        with {:ok, channel_id_bin} <- uuid_to_binary(channel_id),
+             {:ok, result} <- Postgrex.query(conn, query, [channel_id_bin]) do
+          case result.rows do
+            [[guild_id_bin]] -> {:ok, uuid_to_string(guild_id_bin)}
+            [] -> {:error, :not_found}
+          end
+        else
           {:error, reason} ->
             Logger.error(
               "[DataSource.Postgres] fetch_guild_for_channel failed: #{inspect(reason)}"
@@ -76,13 +91,14 @@ defmodule NexusGateway.DataSource.Postgres do
 
     with_connection(
       fn conn ->
-        case Postgrex.query(conn, query, [user_id, channel_id]) do
-          {:ok, %Postgrex.Result{rows: [[bits]]}} ->
-            {:ok, Permissions.from_bits(bits)}
-
-          {:ok, %Postgrex.Result{rows: []}} ->
-            {:ok, Permissions.none()}
-
+        with {:ok, user_id_bin} <- uuid_to_binary(user_id),
+             {:ok, channel_id_bin} <- uuid_to_binary(channel_id),
+             {:ok, result} <- Postgrex.query(conn, query, [user_id_bin, channel_id_bin]) do
+          case result.rows do
+            [[bits]] -> {:ok, Permissions.from_bits(bits)}
+            [] -> {:ok, Permissions.none()}
+          end
+        else
           {:error, reason} ->
             Logger.error(
               "[DataSource.Postgres] fetch_channel_permissions failed: #{inspect(reason)}"
@@ -107,15 +123,15 @@ defmodule NexusGateway.DataSource.Postgres do
 
     with_connection(
       fn conn ->
-        case Postgrex.query(conn, query, [guild_id]) do
-          {:ok, %Postgrex.Result{rows: rows}} ->
-            members =
-              Enum.map(rows, fn [user_id, username] ->
-                %{"user_id" => user_id, "username" => username}
-              end)
+        with {:ok, guild_id_bin} <- uuid_to_binary(guild_id),
+             {:ok, %Postgrex.Result{rows: rows}} <- Postgrex.query(conn, query, [guild_id_bin]) do
+          members =
+            Enum.map(rows, fn [user_id_bin, username] ->
+              %{"user_id" => uuid_to_string(user_id_bin), "username" => username}
+            end)
 
-            {:ok, members}
-
+          {:ok, members}
+        else
           {:error, reason} ->
             Logger.error("[DataSource.Postgres] fetch_guild_members failed: #{inspect(reason)}")
             {:error, reason}
@@ -123,6 +139,32 @@ defmodule NexusGateway.DataSource.Postgres do
       end,
       fn -> NexusGateway.DataSource.Stub.fetch_guild_members(guild_id) end
     )
+  end
+
+  # ─── UUID 変換 (Private) ─────────────────────────────────────────────
+
+  # "11111111-1111-1111-1111-111111111111" -> <<16バイトの生バイナリ>>
+  defp uuid_to_binary(uuid_string) when is_binary(uuid_string) do
+    hex = String.replace(uuid_string, "-", "")
+
+    case byte_size(hex) do
+      32 ->
+        case Base.decode16(hex, case: :mixed) do
+          {:ok, bin} -> {:ok, bin}
+          :error -> {:error, {:invalid_uuid, uuid_string}}
+        end
+
+      _ ->
+        {:error, {:invalid_uuid, uuid_string}}
+    end
+  end
+
+  defp uuid_to_binary(other), do: {:error, {:invalid_uuid, other}}
+
+  # <<16バイトの生バイナリ>> -> "11111111-1111-1111-1111-111111111111"
+  defp uuid_to_string(<<a::32, b::16, c::16, d::16, e::48>>) do
+    :io_lib.format(~c"~8.16.0b-~4.16.0b-~4.16.0b-~4.16.0b-~12.16.0b", [a, b, c, d, e])
+    |> List.to_string()
   end
 
   # ─── Private ────────────────────────────────────────────────────────
